@@ -1,14 +1,20 @@
 #include "HoloPlayVolume.h"
 
+#if _WIN32
 #include <windows.h>
+#endif
 #undef min
 #undef max
 
 #include <glad/glad.h>
 
 #include <GLFW/glfw3.h>
+#if _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #define GLFW_EXPOSE_NATIVE_WGL
+#elif __linux__
+#define GLFW_EXPOSE_NATIVE_X11
+#endif
 #include <GLFW/glfw3native.h>
 
 #include <HoloPlayCore.h>
@@ -33,28 +39,30 @@
 
 using namespace godot;
 
-Shader* HoloPlayVolume::blit_shader = nullptr;
-Shader* HoloPlayVolume::lightfield_shader = nullptr;
+Shader *HoloPlayVolume::blit_shader = nullptr;
+Shader *HoloPlayVolume::lightfield_shader = nullptr;
 const GLfloat HoloPlayVolume::tri_verts[6] = {
-        -1.0, -1.0,
-        -1.0,  3.0,
-        3.0, -1.0
-};
-HoloPlayVolume* HoloPlayVolume::grabbed_display = nullptr;
+    -1.0, -1.0,
+    -1.0, 3.0,
+    3.0, -1.0};
+HoloPlayVolume *HoloPlayVolume::grabbed_display = nullptr;
 
-void HoloPlayVolume::compile_shaders() {
+void HoloPlayVolume::compile_shaders()
+{
     // Compile shaders.
     static std::string gl_version_string = "#version 330 core\n";
     lightfield_shader = new Shader((gl_version_string + hpc_LightfieldVertShaderGLSL).c_str(), (gl_version_string + hpc_LightfieldFragShaderGLSL).c_str());
 };
 
-void HoloPlayVolume::free_shaders() {
+void HoloPlayVolume::free_shaders()
+{
     // Free shaders.
     delete blit_shader;
     delete lightfield_shader;
 }
 
-void HoloPlayVolume::_register_methods() {
+void HoloPlayVolume::_register_methods()
+{
     register_method("_process", &HoloPlayVolume::_process);
     register_method("_input", &HoloPlayVolume::_input);
     register_method("_notification", &HoloPlayVolume::_notification);
@@ -90,7 +98,7 @@ void HoloPlayVolume::_register_methods() {
     register_method("get_quilt_preset", &HoloPlayVolume::get_quilt_preset);
     register_method("set_quilt_preset", &HoloPlayVolume::set_quilt_preset);
     register_property("cull_mask", &HoloPlayVolume::set_cull_mask, &HoloPlayVolume::get_cull_mask, (uint32_t)0xffffff, GODOT_METHOD_RPC_MODE_DISABLED, GODOT_PROPERTY_USAGE_DEFAULT, GODOT_PROPERTY_HINT_LAYERS_3D_RENDER);
-    register_property("environment", &HoloPlayVolume::set_environment, &HoloPlayVolume::get_environment, Ref<Environment>(),  GODOT_METHOD_RPC_MODE_DISABLED, GODOT_PROPERTY_USAGE_DEFAULT, GODOT_PROPERTY_HINT_RESOURCE_TYPE, "Environment");
+    register_property("environment", &HoloPlayVolume::set_environment, &HoloPlayVolume::get_environment, Ref<Environment>(), GODOT_METHOD_RPC_MODE_DISABLED, GODOT_PROPERTY_USAGE_DEFAULT, GODOT_PROPERTY_HINT_RESOURCE_TYPE, "Environment");
     register_property("device_index", &HoloPlayVolume::set_device_index, &HoloPlayVolume::get_device_index, 0);
     register_property("dummy", &HoloPlayVolume::set_dummy, &HoloPlayVolume::is_dummy, false);
     register_property("debug_view", &HoloPlayVolume::set_debug_view, &HoloPlayVolume::get_debug_view, false);
@@ -99,177 +107,212 @@ void HoloPlayVolume::_register_methods() {
     register_property("view_dist", &HoloPlayVolume::set_view_dist, &HoloPlayVolume::get_view_dist, 1.0f);
     register_property("view_cone", &HoloPlayVolume::set_view_cone, &HoloPlayVolume::get_view_cone, 80.0f);
     register_property("size", &HoloPlayVolume::set_size, &HoloPlayVolume::get_size, 1.0f);
-    register_property("quilt_preset", &HoloPlayVolume::set_quilt_preset, &HoloPlayVolume::get_quilt_preset, (int)QuiltPreset::MEDIUM_QUALITY,  GODOT_METHOD_RPC_MODE_DISABLED, GODOT_PROPERTY_USAGE_DEFAULT, GODOT_PROPERTY_HINT_ENUM, "Low Quality, Medium Quality, High Quality, Very High Quality");
+    register_property("quilt_preset", &HoloPlayVolume::set_quilt_preset, &HoloPlayVolume::get_quilt_preset, (int)QuiltPreset::MEDIUM_QUALITY, GODOT_METHOD_RPC_MODE_DISABLED, GODOT_PROPERTY_USAGE_DEFAULT, GODOT_PROPERTY_HINT_ENUM, "Low Quality, Medium Quality, High Quality, Very High Quality");
 }
 
-HoloPlayVolume::HoloPlayVolume() { }
+HoloPlayVolume::HoloPlayVolume() {}
 
-HoloPlayVolume::~HoloPlayVolume() { }
+HoloPlayVolume::~HoloPlayVolume() {}
 
-float HoloPlayVolume::get_aspect() const {
+float HoloPlayVolume::get_aspect() const
+{
     return aspect;
 }
 
-Rect2 HoloPlayVolume::get_rect() const {
+Rect2 HoloPlayVolume::get_rect() const
+{
     return Rect2(Vector2((real_t)win_x, (real_t)win_y), Vector2((real_t)screen_w, (real_t)screen_h));
 }
 
-Ref<Environment> HoloPlayVolume::get_environment() const {
+Ref<Environment> HoloPlayVolume::get_environment() const
+{
     return environment;
 };
 
-void HoloPlayVolume::set_environment(const Ref<Environment> p_environment) {
+void HoloPlayVolume::set_environment(const Ref<Environment> p_environment)
+{
     environment = p_environment;
 
     VisualServer *vs = VisualServer::get_singleton();
-    for (int i = 0; i < cameras.size(); ++i) {
+    for (int i = 0; i < cameras.size(); ++i)
+    {
         RID camera = cameras[i];
-        if (environment.is_valid()) {
+        if (environment.is_valid())
+        {
             vs->camera_set_environment(camera, environment->get_rid());
-        } else {
+        }
+        else
+        {
             vs->camera_set_environment(camera, RID());
         }
     }
 };
 
-int HoloPlayVolume::get_device_index() const {
+int HoloPlayVolume::get_device_index() const
+{
     return device_index;
 }
 
-uint32_t HoloPlayVolume::get_cull_mask() const {
+uint32_t HoloPlayVolume::get_cull_mask() const
+{
     return layers;
 };
 
-void HoloPlayVolume::set_cull_mask(uint32_t p_layers) {
+void HoloPlayVolume::set_cull_mask(uint32_t p_layers)
+{
     layers = p_layers;
     VisualServer *vs = VisualServer::get_singleton();
-    for (int i = 0; i < cameras.size(); ++i) {
+    for (int i = 0; i < cameras.size(); ++i)
+    {
         RID camera = cameras[i];
         vs->camera_set_cull_mask(camera, layers);
     }
 };
 
-void HoloPlayVolume::set_cull_mask_bit(int p_layer, bool p_enable) {
+void HoloPlayVolume::set_cull_mask_bit(int p_layer, bool p_enable)
+{
     ERR_FAIL_INDEX(p_layer, 32);
-    if (p_enable) {
+    if (p_enable)
+    {
         set_cull_mask(layers | (1 << p_layer));
-    } else {
+    }
+    else
+    {
         set_cull_mask(layers & (~(1 << p_layer)));
     }
 };
 
-bool HoloPlayVolume::get_cull_mask_bit(int p_layer) const {
+bool HoloPlayVolume::get_cull_mask_bit(int p_layer) const
+{
     ERR_FAIL_INDEX_V(p_layer, 32, false);
     return (layers & (1 << p_layer));
 };
 
-void HoloPlayVolume::set_device_index(int p_device_index) {
+void HoloPlayVolume::set_device_index(int p_device_index)
+{
     device_index = p_device_index;
     update_device_properties();
 }
 
-bool HoloPlayVolume::is_dummy() const {
+bool HoloPlayVolume::is_dummy() const
+{
     return dummy;
 }
 
-void HoloPlayVolume::set_dummy(bool p_dummy) {
+void HoloPlayVolume::set_dummy(bool p_dummy)
+{
     dummy = p_dummy;
     update_device_properties();
 }
 
-bool HoloPlayVolume::get_debug_view() const {
+bool HoloPlayVolume::get_debug_view() const
+{
     return debug_view;
 }
 
-void HoloPlayVolume::set_debug_view(bool p_debug_view) {
+void HoloPlayVolume::set_debug_view(bool p_debug_view)
+{
     debug_view = p_debug_view;
     lightfield_shader->use();
     lightfield_shader->setInt("debug", (int)debug_view);
 }
 
-float HoloPlayVolume::get_near_clip() const {
+float HoloPlayVolume::get_near_clip() const
+{
     return near_clip;
 }
 
-void HoloPlayVolume::set_near_clip(float p_near_clip) {
+void HoloPlayVolume::set_near_clip(float p_near_clip)
+{
     near_clip = Math::max(p_near_clip, 0.0f);
     update_gizmo();
     update_cameras();
 }
 
-float HoloPlayVolume::get_far_clip() const {
+float HoloPlayVolume::get_far_clip() const
+{
     return far_clip;
 }
 
-void HoloPlayVolume::set_far_clip(float p_far_clip) {
+void HoloPlayVolume::set_far_clip(float p_far_clip)
+{
     far_clip = Math::max(p_far_clip, 0.0f);
     update_gizmo();
-    update_cameras(); 
+    update_cameras();
 }
 
-float HoloPlayVolume::get_view_dist() const {
+float HoloPlayVolume::get_view_dist() const
+{
     return view_dist;
 }
 
-void HoloPlayVolume::set_view_dist(float p_view_dist) {
+void HoloPlayVolume::set_view_dist(float p_view_dist)
+{
     view_dist = Math::max(p_view_dist, 0.0f);
     update_cameras();
 }
 
-float HoloPlayVolume::get_view_cone() const {
+float HoloPlayVolume::get_view_cone() const
+{
     return view_cone;
 }
 
-void HoloPlayVolume::set_view_cone(float p_view_cone) {
+void HoloPlayVolume::set_view_cone(float p_view_cone)
+{
     view_cone = p_view_cone;
     update_cameras();
 }
 
-float HoloPlayVolume::get_size() const {
+float HoloPlayVolume::get_size() const
+{
     return size;
 }
 
-void HoloPlayVolume::set_size(float p_size) {
+void HoloPlayVolume::set_size(float p_size)
+{
     size = p_size;
     update_gizmo();
     update_cameras();
 }
 
-int HoloPlayVolume::get_quilt_preset() const {
+int HoloPlayVolume::get_quilt_preset() const
+{
     return quilt_preset;
 }
 
-void HoloPlayVolume::set_quilt_preset(int p_quilt_preset) { 
+void HoloPlayVolume::set_quilt_preset(int p_quilt_preset)
+{
     quilt_preset = (QuiltPreset)p_quilt_preset;
-    switch (quilt_preset) {
-        case QuiltPreset::LOW_QUALITY:
-            tex_width = 1024;
-            tex_height = 1024;
-            total_views = 21;
-            num_cols = 3;
-            num_rows = 7;
-            break;
-        case QuiltPreset::MEDIUM_QUALITY:
-            tex_width = 2048;
-            tex_height = 2048;
-            total_views = 32;
-            num_cols = 4;
-            num_rows = 8;
-            break;
-        case QuiltPreset::HIGH_QUALITY:
-            tex_width = 4096;
-            tex_height = 4096;
-            total_views = 45;
-            num_cols = 5;
-            num_rows = 9;
-            break;
-        case QuiltPreset::VERY_HIGH_QUALITY:
-            tex_width = 8192;
-            tex_height = 8192;
-            total_views = 45;
-            num_cols = 5;
-            num_rows = 9;
-            break;
+    switch (quilt_preset)
+    {
+    case QuiltPreset::LOW_QUALITY:
+        tex_width = 1024;
+        tex_height = 1024;
+        total_views = 21;
+        num_cols = 3;
+        num_rows = 7;
+        break;
+    case QuiltPreset::MEDIUM_QUALITY:
+        tex_width = 2048;
+        tex_height = 2048;
+        total_views = 32;
+        num_cols = 4;
+        num_rows = 8;
+        break;
+    case QuiltPreset::HIGH_QUALITY:
+        tex_width = 4096;
+        tex_height = 4096;
+        total_views = 45;
+        num_cols = 5;
+        num_rows = 9;
+        break;
+    case QuiltPreset::VERY_HIGH_QUALITY:
+        tex_width = 8192;
+        tex_height = 8192;
+        total_views = 45;
+        num_cols = 5;
+        num_rows = 9;
+        break;
     }
     create_viewports_and_cameras();
 
@@ -280,14 +323,17 @@ void HoloPlayVolume::set_quilt_preset(int p_quilt_preset) {
     lightfield_shader->setVec3("tile", (float)num_cols, (float)num_rows, (float)total_views);
 }
 
-void HoloPlayVolume::_init() {
-        update_device_properties();
+void HoloPlayVolume::_init()
+{
+    update_device_properties();
 
-        set_notify_transform(true);
+    set_notify_transform(true);
 }
 
-void HoloPlayVolume::_notification(int what) {
-    if (what == Spatial::NOTIFICATION_ENTER_WORLD) {
+void HoloPlayVolume::_notification(int what)
+{
+    if (what == Spatial::NOTIFICATION_ENTER_WORLD)
+    {
         in_world = true;
 
         // Create our GLFW window without a context since we will be re-using
@@ -308,19 +354,21 @@ void HoloPlayVolume::_notification(int what) {
 
         glfwGetWindowContentScale(window, &scale_x, &scale_y);
         glfwSetWindowContentScaleCallback(window, HoloPlayVolume::static_window_content_scale_callback);
-        glfwSetWindowPos(window, (int)(scale_x*win_x)+1, (int)(scale_y*win_y)+1);
-        glfwSetWindowSize(window, (int)(scale_x*screen_w), (int)(scale_y*screen_h));
+        glfwSetWindowPos(window, (int)(scale_x * win_x) + 1, (int)(scale_y * win_y) + 1);
+        glfwSetWindowSize(window, (int)(scale_x * screen_w), (int)(scale_y * screen_h));
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
         glfwSetWindowUserPointer(window, (void *)this);
         glfwSetWindowFocusCallback(window, HoloPlayVolume::static_window_focus_callback);
 
+#if _WIN32
         // Get the windows's device context.
         HWND hwnd = glfwGetWin32Window(window);
         hdc = GetDC(hwnd);
         // Not using async causes issues with Godot.
         ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
         //SetWindowLongPtr(hwnd, GWL_EXSTYLE, WS_EX_NOACTIVATE);
-        if (!hdc) {
+        if (!hdc)
+        {
             ERR_PRINT("Could not retrieve device context!");
         }
 
@@ -331,6 +379,7 @@ void HoloPlayVolume::_notification(int what) {
         PIXELFORMATDESCRIPTOR ppfd;
         int pxf = GetPixelFormat(hdc_gd);
         SetPixelFormat(hdc, pxf, &ppfd);
+#endif
 
         // Create quilt canvas and viewport.
         VisualServer *vs = VisualServer::get_singleton();
@@ -347,25 +396,29 @@ void HoloPlayVolume::_notification(int what) {
 
         // Create VBO.
         glGenBuffers(1, &tri_vbo);
-	    glBindBuffer(GL_ARRAY_BUFFER, tri_vbo);
-	    glBufferData(GL_ARRAY_BUFFER, sizeof(tri_verts), tri_verts, GL_STATIC_DRAW);
-
-    } else if (what == Spatial::NOTIFICATION_EXIT_WORLD) {
+        glBindBuffer(GL_ARRAY_BUFFER, tri_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(tri_verts), tri_verts, GL_STATIC_DRAW);
+    }
+    else if (what == Spatial::NOTIFICATION_EXIT_WORLD)
+    {
         in_world = false;
         glfwDestroyWindow(window);
         free_viewports_and_cameras();
         VisualServer::get_singleton()->free_rid(quilt_canvas);
         quilt_viewport_node->queue_free();
         glDeleteBuffers(1, &tri_vbo);
-    } else if (what == Spatial::NOTIFICATION_TRANSFORM_CHANGED) {
+    }
+    else if (what == Spatial::NOTIFICATION_TRANSFORM_CHANGED)
+    {
         // Update only the camera transforms but not the projections.
         VisualServer *vs = VisualServer::get_singleton();
         float s_view_dist = size * view_dist;
 
-        for (int i = 0; i < cameras.size(); ++i) {
+        for (int i = 0; i < cameras.size(); ++i)
+        {
             RID camera = cameras[i];
             // Shift the camera horizontaly inside the view cone.
-            float shift_angle = (i / (total_views - 1.0f) - 0.5f) * Math::deg2rad(view_cone);  
+            float shift_angle = (i / (total_views - 1.0f) - 0.5f) * Math::deg2rad(view_cone);
             float shift = s_view_dist * Math::tan(shift_angle);
 
             Transform t = get_global_transform(); // Should still be anchored to "unscaled" world
@@ -375,20 +428,28 @@ void HoloPlayVolume::_notification(int what) {
     }
 }
 
-void HoloPlayVolume::_process(float delta) {
+void HoloPlayVolume::_process(float delta)
+{
     render_lightfield();
 
-    if (wait_for_active) {
+#if _Win32
+    if (wait_for_active)
+    {
+
         HWND hwnd = (HWND)godot::OS::get_singleton()->get_native_handle(godot::OS::WINDOW_HANDLE);
         SetActiveWindow(hwnd);
-        if (hwnd == GetActiveWindow()) {
+        if (hwnd == GetActiveWindow())
+        {
             wait_for_active = false;
         }
     }
+#endif
 }
 
-void HoloPlayVolume::update_device_properties() {
-    if (!dummy) {
+void HoloPlayVolume::update_device_properties()
+{
+    if (!dummy)
+    {
         win_x = hpc_GetDevicePropertyWinX(device_index);
         win_y = hpc_GetDevicePropertyWinY(device_index);
 
@@ -409,10 +470,12 @@ void HoloPlayVolume::update_device_properties() {
         fringe = hpc_GetDevicePropertyFringe(device_index);
 
         subpixel = hpc_GetDevicePropertySubp(device_index);
-    } else {
+    }
+    else
+    {
         win_x = 0;
         win_y = 0;
-        
+
         screen_w = 300;
         screen_h = 400;
 
@@ -432,7 +495,8 @@ void HoloPlayVolume::update_device_properties() {
     }
 
     // Update uniforms.
-    if (lightfield_shader) {
+    if (lightfield_shader)
+    {
         lightfield_shader->use();
 
         lightfield_shader->setFloat("pitch", lent_pitch);
@@ -458,15 +522,18 @@ void HoloPlayVolume::update_device_properties() {
 
     create_viewports_and_cameras();
 
-    if (window) {
+    if (window)
+    {
         glfwGetWindowContentScale(window, &scale_x, &scale_y);
-        glfwSetWindowPos(window, (int)(scale_x*win_x)+1, (int)(scale_y*win_y)+1);
-        glfwSetWindowSize(window, (int)(scale_x*screen_w), (int)(scale_y*screen_h));
+        glfwSetWindowPos(window, (int)(scale_x * win_x) + 1, (int)(scale_y * win_y) + 1);
+        glfwSetWindowSize(window, (int)(scale_x * screen_w), (int)(scale_y * screen_h));
     }
 }
 
-void HoloPlayVolume::create_viewports_and_cameras() {
-    if (!in_world) return;
+void HoloPlayVolume::create_viewports_and_cameras()
+{
+    if (!in_world)
+        return;
 
     free_viewports_and_cameras();
 
@@ -478,11 +545,12 @@ void HoloPlayVolume::create_viewports_and_cameras() {
     float view_aspect = view_width / view_height;
 
     VisualServer *vs = VisualServer::get_singleton();
-    for (int i = 0; i < total_views; ++i) {
+    for (int i = 0; i < total_views; ++i)
+    {
         RID viewport = vs->viewport_create();
         RID camera = vs->camera_create();
         RID canvas_item = vs->canvas_item_create();
-        
+
         float x = (i % num_cols) * view_width;
         float y = (i / num_cols) * view_height;
         vs->canvas_item_add_texture_rect(canvas_item,
@@ -491,9 +559,12 @@ void HoloPlayVolume::create_viewports_and_cameras() {
 
         vs->canvas_item_set_parent(canvas_item, quilt_canvas);
 
-        if (view_aspect > aspect) {
+        if (view_aspect > aspect)
+        {
             vs->viewport_set_size(viewport, (int)view_width, (int)(view_width / aspect));
-        } else {
+        }
+        else
+        {
             vs->viewport_set_size(viewport, (int)(view_height * aspect), (int)(view_height));
         }
 
@@ -510,7 +581,8 @@ void HoloPlayVolume::create_viewports_and_cameras() {
     update_cameras();
 }
 
-void HoloPlayVolume::update_cameras() {
+void HoloPlayVolume::update_cameras()
+{
     VisualServer *vs = VisualServer::get_singleton();
     float s_view_dist = size * view_dist;
     float s_near_clip = size * near_clip;
@@ -520,10 +592,11 @@ void HoloPlayVolume::update_cameras() {
     float zfar = s_view_dist + s_far_clip;
     float near_size = size * znear / s_view_dist / aspect; // Width of near plane (in global units)
 
-    for (int i = 0; i < cameras.size(); ++i) {
+    for (int i = 0; i < cameras.size(); ++i)
+    {
         RID camera = cameras[i];
         // Shift the camera horizontaly inside the view cone.
-        float shift_angle = (i / (total_views - 1.0f) - 0.5f) * Math::deg2rad(view_cone);  
+        float shift_angle = (i / (total_views - 1.0f) - 0.5f) * Math::deg2rad(view_cone);
         float shift = s_view_dist * Math::tan(shift_angle);
 
         Transform t = get_global_transform(); // Should still be anchored to "unscaled" world
@@ -534,17 +607,22 @@ void HoloPlayVolume::update_cameras() {
         vs->camera_set_frustum(camera, near_size, offset, znear, zfar);
 
         vs->camera_set_cull_mask(camera, layers);
-        if (environment.is_valid()) {
+        if (environment.is_valid())
+        {
             vs->camera_set_environment(camera, environment->get_rid());
-        } else {
+        }
+        else
+        {
             vs->camera_set_environment(camera, RID());
         }
     }
 }
 
-void HoloPlayVolume::free_viewports_and_cameras() {
+void HoloPlayVolume::free_viewports_and_cameras()
+{
     VisualServer *vs = VisualServer::get_singleton();
-    for (int i = 0; i < viewports.size(); ++i) {
+    for (int i = 0; i < viewports.size(); ++i)
+    {
         RID viewport = viewports[i];
         RID camera = cameras[i];
         RID canvas_item = canvas_items[i];
@@ -560,23 +638,28 @@ void HoloPlayVolume::free_viewports_and_cameras() {
     canvas_items.resize(0);
 }
 
-void HoloPlayVolume::render_lightfield() {
-    if (!hdc) return;
-    VisualServer *vs = VisualServer::get_singleton();
+void HoloPlayVolume::render_lightfield()
+{
+#if _Win32
+    if (!hdc)
+        return;
 
     HGLRC hglrc = (HGLRC)OS::get_singleton()->get_native_handle(OS::OPENGL_CONTEXT);
     HDC hdc_gd = (HDC)OS::get_singleton()->get_native_handle(OS::WINDOW_VIEW);
 
     wglMakeCurrent(hdc, hglrc);
-    
+#endif
+
+    VisualServer *vs = VisualServer::get_singleton();
+
     glBindBuffer(GL_ARRAY_BUFFER, tri_vbo);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
-	glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glViewport(0, 0, (int)(scale_x*screen_w), (int)(scale_y*screen_h));
+    glViewport(0, 0, (int)(scale_x * screen_w), (int)(scale_y * screen_h));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, (GLuint)vs->texture_get_texid(vs->viewport_get_texture(quilt_viewport)));
@@ -587,44 +670,59 @@ void HoloPlayVolume::render_lightfield() {
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 
+#if _Win32
     SwapBuffers(hdc);
-    
+
     wglMakeCurrent(hdc_gd, hglrc); // Move context back to main window.
+#endif
+
+    glfwSwapBuffers(window);
 }
 
-void HoloPlayVolume::update_quilt_viewport() {
-    if (quilt_viewport.is_valid()) {
+void HoloPlayVolume::update_quilt_viewport()
+{
+    if (quilt_viewport.is_valid())
+    {
         VisualServer *vs = VisualServer::get_singleton();
         vs->viewport_set_size(quilt_viewport, tex_width, tex_height);
     }
 }
 
-void HoloPlayVolume::static_window_focus_callback(GLFWwindow *window, int focused) {
+void HoloPlayVolume::static_window_focus_callback(GLFWwindow *window, int focused)
+{
     HoloPlayVolume *hpv = (HoloPlayVolume *)glfwGetWindowUserPointer(window);
-    hpv->window_focus_callback((bool)focused); 
+    hpv->window_focus_callback((bool)focused);
 }
 
-void HoloPlayVolume::static_window_content_scale_callback(GLFWwindow* window, float xscale, float yscale) {
+void HoloPlayVolume::static_window_content_scale_callback(GLFWwindow *window, float xscale, float yscale)
+{
     HoloPlayVolume *hpv = (HoloPlayVolume *)glfwGetWindowUserPointer(window);
-    hpv->window_content_scale_callback(xscale, yscale); 
+    hpv->window_content_scale_callback(xscale, yscale);
 }
 
-void HoloPlayVolume::window_focus_callback(bool focused) {
-    if (focused) {
+void HoloPlayVolume::window_focus_callback(bool focused)
+{
+#if _Win32
+    if (focused)
+    {
         HWND hwnd = (HWND)OS::get_singleton()->get_native_handle(OS::WINDOW_HANDLE);
         SetActiveWindow(hwnd);
     }
+#endif
 }
 
-void HoloPlayVolume::window_content_scale_callback(float xscale, float yscale) {
+void HoloPlayVolume::window_content_scale_callback(float xscale, float yscale)
+{
     scale_x = xscale;
     scale_y = yscale;
-    glfwSetWindowPos(window, (int)(scale_x*win_x)+1, (int)(scale_y*win_y)+1);
-    glfwSetWindowSize(window, (int)(scale_x*screen_w), (int)(scale_y*screen_h));
+    glfwSetWindowPos(window, (int)(scale_x * win_x) + 1, (int)(scale_y * win_y) + 1);
+    glfwSetWindowSize(window, (int)(scale_x * screen_w), (int)(scale_y * screen_h));
 }
 
-void HoloPlayVolume::grab_mouse() {
-    if (!grabbed_display) { // if no display has grabbed the mouse, change mouse mode
+void HoloPlayVolume::grab_mouse()
+{
+    if (!grabbed_display)
+    { // if no display has grabbed the mouse, change mouse mode
         Input *input = Input::get_singleton();
         orig_mouse_mode = input->get_mouse_mode();
         input->set_mouse_mode(Input::MOUSE_MODE_CAPTURED);
@@ -632,42 +730,54 @@ void HoloPlayVolume::grab_mouse() {
     grabbed_display = this;
 }
 
-void HoloPlayVolume::release_mouse() {
-    if (grabbed_display == this) {
+void HoloPlayVolume::release_mouse()
+{
+    if (grabbed_display == this)
+    {
         Input::get_singleton()->set_mouse_mode(orig_mouse_mode);
         grabbed_display = nullptr;
-    } else {
+    }
+    else
+    {
         ERR_PRINT("Window belonging to this HoloPlayVolume has not currently grabbed the mouse.");
     }
 }
 
-Vector2 HoloPlayVolume::get_mouse_position() const {
+Vector2 HoloPlayVolume::get_mouse_position() const
+{
     return mouse_pos;
 }
 
-Vector3 HoloPlayVolume::project_position(Vector2 screen_point, float z_depth) const {
+Vector3 HoloPlayVolume::project_position(Vector2 screen_point, float z_depth) const
+{
     real_t rel_x = (real_t)(screen_point.x / (real_t)screen_w - 0.5);
     real_t rel_y = (real_t)(0.5 - screen_point.y / (real_t)screen_h);
     Vector3 local_pos = size * Vector3(rel_x, rel_y / aspect, -z_depth);
     return get_global_transform() * local_pos;
 }
 
-Vector3 HoloPlayVolume::project_ray_normal(Vector2 screen_point) const {
+Vector3 HoloPlayVolume::project_ray_normal(Vector2 screen_point) const
+{
     return -get_global_transform().basis.z;
 }
 
-Vector3 HoloPlayVolume::project_ray_origin(Vector2 screen_point) const {
+Vector3 HoloPlayVolume::project_ray_origin(Vector2 screen_point) const
+{
     return project_position(screen_point, -near_clip);
 }
 
-Ref<ViewportTexture> HoloPlayVolume::get_quilt_tex() const {
+Ref<ViewportTexture> HoloPlayVolume::get_quilt_tex() const
+{
     return quilt_viewport_node->get_texture();
 };
 
-void HoloPlayVolume::_input(const Ref<InputEvent> event) {
-    if (grabbed_display == this) {
+void HoloPlayVolume::_input(const Ref<InputEvent> event)
+{
+    if (grabbed_display == this)
+    {
         InputEventMouseMotion *mm = Object::cast_to<InputEventMouseMotion>(event.ptr());
-        if (mm) {
+        if (mm)
+        {
             mouse_pos += mm->get_relative();
             mouse_pos.x = Math::clamp(mouse_pos.x, 0.0f, (real_t)screen_w);
             mouse_pos.y = Math::clamp(mouse_pos.y, 0.0f, (real_t)screen_h);

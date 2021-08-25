@@ -8,9 +8,9 @@ env = DefaultEnvironment()
 
 # Define our options
 opts.Add(EnumVariable('target', "Compilation target", 'debug', ['d', 'debug', 'r', 'release']))
-opts.Add(EnumVariable('platform', "Compilation platform", '', ['', 'windows']))
-opts.Add(EnumVariable('p', "Compilation target, alias for 'platform'", '', ['', 'windows']))
-opts.Add(PathVariable('target_path', 'The path where the lib is installed.', 'build/'))
+opts.Add(EnumVariable('platform', "Compilation platform", '', ['', 'windows', 'linux']))
+opts.Add(EnumVariable('p', "Compilation target, alias for 'platform'", '', ['', 'windows', 'linux']))
+opts.Add(PathVariable('target_path', 'The path where the lib is installed.', 'build/', PathVariable.PathIsDirCreate))
 opts.Add(PathVariable('target_name', 'The library name.', 'libgdholoplay', PathVariable.PathAccept))
 
 # Local dependency paths, adapt them to your setup
@@ -57,6 +57,19 @@ if env['platform'] == "windows":
     else:
         env.Append(CPPDEFINES=['NDEBUG'])
         env.Append(CCFLAGS=['-O2', '-EHsc', '-MD'])
+elif env["platform"] == "linux":
+    env["target_path"] += "linux64/"
+    cpp_library += ".linux"
+
+    env.Append(CCFLAGS=['-Wall', '-Wextra'])
+    env.Append(CXXFLAGS='-std=c++17')
+    if env['target'] in ('debug', 'd'):
+        env.Append(CPPDEFINES=['_DEBUG'])
+        # env.Append(CCFLAGS=['-EHsc', '-MDd', '-ZI'])
+        env.Append(LINKFLAGS=['-DEBUG'])
+    else:
+        env.Append(CPPDEFINES=['NDEBUG'])
+        env.Append(CCFLAGS=['-O2'])
 
 if env['target'] in ('debug', 'd'):
     cpp_library += '.debug'
@@ -74,14 +87,20 @@ env.Append(CPPPATH=['.',
                     'HoloPlayCore/include/',
                     'glfw/include/',
                     'glad/include/'])
-env.Append(LIBPATH=[cpp_bindings_path + 'bin/'])
-env.Append(LIBS=[cpp_library,
-'HoloPlayCore/HoloPlayCore.lib',
-'glfw/glfw3.lib',
-'opengl32.lib',
-'user32.lib',
-'gdi32.lib',
-'shell32.lib'])
+
+if env['platform'] == "windows":
+    env.Append(LIBPATH=[cpp_bindings_path + 'bin/'])
+    env.Append(LIBS=[cpp_library, 'HoloPlayCore/HoloPlayCore.lib',
+    'glfw/glfw3.lib',
+    'opengl32.lib',
+    'user32.lib',
+    'gdi32.lib',
+    'shell32.lib'])
+if env['platform'] == "linux":
+    env.Append(LIBPATH=[cpp_bindings_path + 'bin/', 'HoloPlayCore/'])
+    env.Append(RPATH=["addons/holoplay/bin/x11"])
+    env.Append(LIBS=[cpp_library, 'HoloPlayCore', "glfw"])
+    # env.Append(LINKFLAGS=['-Wl,-rpath,\'$$ORIGIN\''])
 
 # tweak this if you want to use different folders, or more folders, to store your source code in.
 env.Append(CPPPATH=['src/'])
